@@ -36,8 +36,8 @@ public:
 
 	void *mmapRing;
     unsigned char *head;
-	unsigned int canRead(int d = 1);    //how much can read
-    unsigned int canWrite(int d = 1);   //how much can write
+	unsigned int canRead();    //how much can read
+    unsigned int canWrite();   //how much can write
     int readFlags(void* flag, int positionOfFlags, int count = 1);  //read the flags data, when using the flags, make sure you arrange the memory well
     unsigned int read(void *data, unsigned int count);  //take data frome ringbuffer
     unsigned int readOnly(void *data, unsigned int count);    //only read from the buffer, without changing the data in the ringbuffer
@@ -51,7 +51,7 @@ private:
 	unsigned int bufferSize{NULL};       //buffer size
     /*环形缓冲区变量*/
     unsigned int rbCapacity{NULL}; //容量
-    unsigned int rbHead[2];
+    unsigned int *rbHead = (unsigned int *)(mmap(NULL, 8, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0));
     unsigned int rbBuff{NULL};
     unsigned int sizeOfFlags{0};
     unsigned int sizeOfAddr{SIZE_INT};

@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string>
 #include <stdio.h>
 #include <algorithm>
 
@@ -74,7 +74,7 @@ int main(int argC, char* argv[])
       //sendto(sockfd, rcvdData, len, 0, (struct sockaddr *)&addr, addr_len);
 
       /* 接收server端返回的字符串*/
-    bufferRest = std::min(65535, rb.canWrite());
+    bufferRest = std::min((unsigned int)(65535), rb.canWrite());
       //printf("Remaining: %dbytes\n", rb.canWrite());
       //len = recvfrom(sockfd, rcvdData, bufferRest, 0, (struct sockaddr *)&addr, &addr_len);
     len = recv(sockfd, rcvdData, bufferRest,0);

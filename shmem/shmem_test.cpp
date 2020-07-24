@@ -21,7 +21,7 @@ int main(int argC, char* argv[]) {
   char* parent_message = "helloabcdefghi";  // parent process will write this message
   char* child_message = "goodbyejklmnopqr"; // child process will then write this one
 
-  unsigned char *bufferHead= new unsigned char [30];//The address of the head
+  unsigned char *bufferHead= new unsigned char [20];//The address of the head
 
   ringBuffer rb{bufferHead, 30, 3}; //create the shared memory with the ring buffer
 

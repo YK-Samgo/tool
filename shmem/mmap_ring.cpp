@@ -1,20 +1,16 @@
 #include "mmap_ring.h"
 
 ringBuffer::ringBuffer(unsigned char *headAddr, size_t size, int flagsBuffer){
-	sizeOfAddr = SIZE_INT;
-    sizeOfAddrs = 2 * SIZE_INT;
 	bufferSize = size;
 	sizeOfFlags = flagsBuffer;
-    rbCapacity = size - sizeOfAddrs - sizeOfFlags;//开头8字节用于保存首尾位置信息，用户接触不到。再一部分空间用于储存从parent发来的flags，用户定义
+    rbCapacity = size - sizeOfFlags;//一部分空间用于储存从parent发来的flags，用户定义
     head = headAddr;
-    rbBuff = sizeOfAddrs + sizeOfFlags;
+    rbBuff = sizeOfFlags;
     rbHead[0] = rbBuff;
     rbHead[1] = rbBuff;
 	int protection = PROT_READ | PROT_WRITE;
 	int visibility = MAP_ANONYMOUS | MAP_SHARED;
 	mmapRing = mmap(headAddr, bufferSize, protection, visibility, 0, 0);
-
-	memcpy(mmapRing, &rbHead, sizeOfAddrs);
 }
 
 ringBuffer::~ringBuffer(){
@@ -25,15 +21,10 @@ ringBuffer::~ringBuffer(){
 
 /**
  * @brief ringBuffer::rbCanRead
- * @param 是否需要更新tail和head信息，从外部访问时，参数留空即可
  * @return 缓冲区可读字节数
  */
-unsigned int ringBuffer::canRead(int d)
+unsigned int ringBuffer::canRead()
 {
-	if (d)
-	{
-		memcpy(&rbHead, mmapRing, sizeOfAddrs);
-	}
     //ring buffer is NULL, return -1
     if((NULL == rbBuff)||(NULL == rbHead[0])||(NULL == rbHead[1]))
     {
@@ -54,16 +45,11 @@ unsigned int ringBuffer::canRead(int d)
 
 /**
  * @brief ringBuffer::rbCanWrite  缓冲区剩余可写字节数
- * @param 是否需要更新tail和head信息，从外部访问时，参数留空即可
  * @return  可写字节数
  */
-unsigned int ringBuffer::canWrite(int d)
+unsigned int ringBuffer::canWrite()
 {
-	if (d)
-	{
-		memcpy(&rbHead, mmapRing, sizeOfAddrs);
-	}
-    return rbCapacity - canRead(0);
+    return rbCapacity - canRead();
 }
 
 /**
@@ -80,7 +66,7 @@ int ringBuffer::readFlags(void *flag, int positionOfFlags, int count)
 		return -1;//invalid flag position
 	}
 
-	memcpy(flag, mmapRing + sizeOfAddrs + positionOfFlags, count);
+	memcpy(flag, mmapRing + positionOfFlags, count);
 	return 0;
 }
 
@@ -92,7 +78,6 @@ int ringBuffer::readFlags(void *flag, int positionOfFlags, int count)
  */
 unsigned int ringBuffer::read(void *data, unsigned int count)
 {
-	memcpy(&rbHead, mmapRing, sizeOfAddrs);
     int copySz = 0;
 
     if((NULL == rbBuff)||(NULL == rbHead[0])||(NULL == rbHead[1]))
@@ -106,30 +91,27 @@ unsigned int ringBuffer::read(void *data, unsigned int count)
 
     if (rbHead[0] <= rbHead[1])
     {
-        copySz = std::min(count, canRead(0));
+        copySz = std::min(count, canRead());
         memcpy(data, mmapRing + rbHead[0], copySz);
         rbHead[0] += copySz;
-        memcpy(mmapRing, rbHead, sizeOfAddr);
         return copySz;
     }
     else
     {
-        if (count < rbCapacity-(rbHead[0] - rbBuff))
+        if (count < bufferSize - rbHead[0])
         {
             copySz = count;
             memcpy(data, mmapRing + rbHead[0], copySz);
             rbHead[0] += copySz;
-        	memcpy(mmapRing, rbHead, sizeOfAddr);
             return copySz;
         }
         else
         {
-        	copySz = std::min(count, canRead(0));
+        	copySz = std::min(count, canRead());
             int dataAfterHead = rbCapacity-(rbHead[0] - rbBuff);
             memcpy(data, mmapRing + rbHead[0], dataAfterHead);
             memcpy(((unsigned char *)data) + dataAfterHead, mmapRing + rbBuff, copySz - dataAfterHead);
             rbHead[0] = rbBuff + copySz - dataAfterHead;
-        	memcpy(mmapRing, rbHead, sizeOfAddr);
             return copySz;
         }
     }
@@ -143,7 +125,6 @@ unsigned int ringBuffer::read(void *data, unsigned int count)
 */
 unsigned int ringBuffer::readOnly(void *data, unsigned int count)
 {
-	memcpy(&rbHead, mmapRing, sizeOfAddrs);
     int copySz = 0;
 
     if((NULL == rbBuff)||(NULL == rbHead[0])||(NULL == rbHead[1]))
@@ -157,13 +138,13 @@ unsigned int ringBuffer::readOnly(void *data, unsigned int count)
 
     if (rbHead[0] <= rbHead[1])
     {
-        copySz = std::min(count, canRead(0));
+        copySz = std::min(count, canRead());
         memcpy(data, mmapRing + rbHead[0], copySz);
         return copySz;
     }
     else
     {
-        if (count < rbCapacity-(rbHead[0] - rbBuff))
+        if (count < bufferSize - rbHead[0])
         {
             copySz = count;
             memcpy(data, mmapRing + rbHead[0], copySz);
@@ -171,7 +152,7 @@ unsigned int ringBuffer::readOnly(void *data, unsigned int count)
         }
         else
         {
-            copySz = std::min(count, canRead(0));
+            copySz = std::min(count, canRead());
             int dataAfterHead = rbCapacity-(rbHead[0] - rbBuff);
             memcpy(data, mmapRing + rbHead[0], dataAfterHead);
             memcpy((unsigned char *)data + dataAfterHead, mmapRing + rbBuff, copySz - dataAfterHead);
@@ -193,7 +174,7 @@ int ringBuffer::writeFlags(void *data, int positionOfFlags, int count)
 		return -1;//invalid flag position
 	}
 
-	memcpy(mmapRing + sizeOfAddrs + positionOfFlags, data, count);
+	memcpy(mmapRing + positionOfFlags, data, count);
 	return 0;
 }
 
@@ -205,7 +186,6 @@ int ringBuffer::writeFlags(void *data, int positionOfFlags, int count)
  */
 unsigned int ringBuffer::write(const void *data, unsigned int count)
 {
-	memcpy(&rbHead, mmapRing, sizeOfAddrs);
     int tailAvailSz = 0;
 
     if((NULL == rbBuff)||(NULL == rbHead[0])||(NULL == rbHead[1]))
@@ -218,7 +198,7 @@ unsigned int ringBuffer::write(const void *data, unsigned int count)
         return -1;
     }
     
-    if (count >= canWrite(0))
+    if (count >= canWrite())
     {
         printf("data loss: %d\n", count);
         return -1;//缓存溢出
@@ -226,12 +206,11 @@ unsigned int ringBuffer::write(const void *data, unsigned int count)
 
     if (rbHead[0] <= rbHead[1])
     {
-        tailAvailSz = rbCapacity - (rbHead[1] - rbBuff);
+        tailAvailSz = bufferSize - rbHead[0];
         if (count < tailAvailSz)
         {
             memcpy(mmapRing + rbHead[1], data, count);
             rbHead[1] += count;
-			memcpy(mmapRing + sizeOfAddr, rbHead + 1, sizeOfAddr);
             return count;
         }
         else if (count > tailAvailSz)
@@ -239,14 +218,12 @@ unsigned int ringBuffer::write(const void *data, unsigned int count)
             memcpy(mmapRing + rbHead[1], data, tailAvailSz);
             memcpy(mmapRing + rbBuff, (unsigned char *)data + tailAvailSz, count - tailAvailSz);
             rbHead[1] = count - tailAvailSz + rbBuff;
-			memcpy(mmapRing + sizeOfAddr, rbHead + 1, sizeOfAddr);
             return count;
         }
         else
         {
             memcpy(mmapRing + rbHead[1], data, tailAvailSz);
             rbHead[1] = rbBuff;
-			memcpy(mmapRing + sizeOfAddr, rbHead + 1, sizeOfAddr);
             return count;
         }
     }
@@ -254,7 +231,6 @@ unsigned int ringBuffer::write(const void *data, unsigned int count)
     {
         memcpy(mmapRing + rbHead[1], data, count);
         rbHead[1] += count;
-		memcpy(mmapRing + sizeOfAddr, rbHead + 1, sizeOfAddr);
         return count;
     }
 }
@@ -266,7 +242,6 @@ unsigned int ringBuffer::write(const void *data, unsigned int count)
  */
 unsigned int ringBuffer::throwData(unsigned int count)
 {
-    memcpy(&rbHead, mmapRing, sizeOfAddrs);
     int copySz = 0;
 
     if((NULL == rbBuff)||(NULL == rbHead[0])||(NULL == rbHead[1]))
@@ -276,9 +251,8 @@ unsigned int ringBuffer::throwData(unsigned int count)
 
     if (rbHead[0] <= rbHead[1])
     {
-        copySz = std::min(count, canRead(0));
+        copySz = std::min(count, canRead());
         rbHead[0] += copySz;
-        memcpy(mmapRing, rbHead, sizeOfAddr);
         return copySz;
     }
     else
@@ -286,14 +260,12 @@ unsigned int ringBuffer::throwData(unsigned int count)
         if (count < rbCapacity-(rbHead[0] - rbBuff))
         {
             rbHead[0] += count;
-            memcpy(mmapRing, rbHead, sizeOfAddr);
             return copySz;
         }
         else
         {
-            copySz = std::min(count, canRead(0));
-            rbHead[0] = (rbBuff << 1) + copySz - rbCapacity - rbHead[0];
-            memcpy(mmapRing, rbHead, sizeOfAddr);
+            copySz = std::min(count, canRead());
+            rbHead[0] = copySz + rbHead[0] - rbCapacity;
             return copySz;
         }
     }
