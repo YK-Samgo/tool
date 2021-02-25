@@ -1,3 +1,20 @@
-*.o
-*Test
-*test
+# Force add deb file when required.
+*.deb
+
+tmp_*/
+
+*.tar.gz
+*.tgz
+
+# VS code settings folder
+.vscode
+
+# Apple attr file
+.DS_Store
+
+# py cache folder
+__pycache__
+*.py[cod]
+
+# C extensions
+*.so
